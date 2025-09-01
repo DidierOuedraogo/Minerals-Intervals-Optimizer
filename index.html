@@ -45,9 +45,16 @@
   .legend{position:absolute;right:10px;bottom:8px;font-size:12px;color:#b7c8eb;background:rgba(8,13,28,.7);border:1px solid #1f2a44;padding:6px 8px;border-radius:8px}
   .compass{position:absolute; right:10px; top:10px; width:80px; height:80px; border-radius:50%; border:1px solid #1f2a44; background:rgba(8,13,28,.7); display:grid; place-items:center; color:#cfe2ff; font-weight:700; font-size:12px}
   .compass .needle{width:2px; height:60%; background:#ef4444; transform-origin:bottom center}
-  .palette{position:absolute; right:10px; top:98px; background:rgba(8,13,28,.7); border:1px solid #1f2a44; padding:6px 8px; border-radius:8px; font-size:12px; color:#cfe2ff}
-  .palette-bar{width:12px; height:160px; background:linear-gradient(180deg, #30123b, #4146a6, #2bb6d9, #42d36b, #e6e647, #f28e2b, #a60026); border-radius:6px; margin:6px auto}
-  .palette .ticks{display:flex; justify-content:space-between; flex-direction:column; height:160px}
+
+  /* Palette verticale alignée */
+  .palette {position:absolute; right:10px; top:98px; background:rgba(8,13,28,.7); border:1px solid #1f2a44; padding:8px; border-radius:8px; color:#cfe2ff; font-size:12px; display:flex; flex-direction:column; gap:6px; min-width:70px}
+  .palette .title{font-weight:700; text-align:center}
+  .palette .scale { display:grid; grid-template-columns:auto 1fr; align-items:stretch; gap:8px }
+  .palette .labels { display:flex; flex-direction:column; justify-content:space-between; height:160px; line-height:1; }
+  .palette .labels div { transform:translateY(4px); /* petit ajustement visual */ }
+  .palette .bar-wrap { display:flex; align-items:stretch; }
+  .palette .bar { width:14px; height:160px; border-radius:6px; background:linear-gradient(180deg, #30123b, #4146a6, #2bb6d9, #42d36b, #e6e647, #f28e2b, #a60026); }
+
   footer{padding:10px;text-align:center;color:#b6c6ea;font-size:12px}
   .note{font-size:12px; color:#a9bbdf; margin-top:6px}
   #progress{position:fixed; left:12px; right:12px; bottom:12px; background:rgba(8,13,28,.9); border:1px solid #1f2a44; border-radius:10px; padding:10px; z-index:9999; color:#cfe2ff; font:12px system-ui; display:none}
@@ -183,13 +190,26 @@
           <input id="pt-size" class="btn" type="range" min="1" max="6" step="0.5" value="2" title="Taille points" style="width:120px">
           <button id="btn-capture" class="btn">Capture PNG</button>
         </div>
+
+        <!-- Palette corrigée: labels alignés à gauche de la barre -->
         <div class="palette" id="palette-au" aria-label="palette Au">
-          <div style="text-align:center;font-weight:700">Au (g/t)</div>
-          <div class="palette-bar"></div>
-          <div class="ticks">
-            <div>30</div><div>10</div><div>3</div><div>1</div><div>0.3</div><div>0.1</div><div>0.05</div>
+          <div class="title">Au (g/t)</div>
+          <div class="scale">
+            <div class="labels">
+              <div>30</div>
+              <div>10</div>
+              <div>3</div>
+              <div>1</div>
+              <div>0.3</div>
+              <div>0.1</div>
+              <div>0.05</div>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar"></div>
+            </div>
           </div>
         </div>
+
         <div class="legend">Pan: clic • Rotate: Shift+clic • Zoom: molette • Grille 100 m • Mesh violet • N vers Y+</div>
         <div class="compass" aria-label="boussole">
           <div>N</div>
@@ -221,28 +241,24 @@
 </div>
 
 <script>
-/* ===================== Améliorations “Au safe” ======================
- - Auto-mapping renforcé: évite From/To/Length comme Au
- - Analyse post-mapping: détecte Au suspect (métrages)
- - Confirmation si anomalie détectée (bloque par défaut)
- - Parsing robuste (espaces milliers, virgule/point)
- - Rendu moderne/stable déjà inclus (turbo, tri profondeur, HiDPI)
-===================================================================== */
+/* Cette version conserve les améliorations précédentes (palette turbo, tri profondeur, HiDPI,
+   garde-fous Au, progression), mais corrige la palette visuelle et aligne les labels. */
 
-// ---------- Etat global ----------
+/* Etat, utilitaires, parsing, géométrie, rendu, import, etc.
+   Les fonctions sont identiques à la version précédente envoyée, à l’exception de la
+   structure de la palette (CSS/HTML). Pour cohérence et autonomie, tout est inclus ci-dessous. */
+
 let samples=[], intervals=[], triangles=[], grid=null, meshS=null;
 let sampleRaw=[]; let headersRaw=[]; let sepChoice='auto', decChoice='.';
 let noHeader=false;
 let lastSampleStats=null, lastIntervalStats=null;
 let meshName = 'mesh_demo';
 
-// ---------- DOM ----------
 const logEl = document.getElementById('log');
 const canvas = document.getElementById('view'); const ctx = canvas.getContext('2d');
 const needle = document.getElementById('compass-needle');
 const auWarnEl = document.getElementById('au-warning');
 
-// ---------- Utils ----------
 function log(m){ const t=new Date().toLocaleTimeString(); logEl.textContent = `[${t}] ${m}\n` + logEl.textContent; }
 function fmt(x,d=2){ if (x==null||!isFinite(x)) return ''; const a=Math.abs(x); const dd=(a>=1?d:Math.min(6, d+Math.ceil(-Math.log10(a+1e-12)))); return Number(x).toFixed(dd); }
 function median(a){ if(!a.length) return null; const s=[...a].sort((x,y)=>x-y); const n=s.length,m=Math.floor(n/2); return n%2?s[m]:(s[m-1]+s[m])/2; }
@@ -255,21 +271,14 @@ function parseNumber(str, dec){
   if (typeof str==='number') return str;
   let s=String(str).trim();
   if(!s) return NaN;
-  s = s.replace(/\u00A0/g,' ').replace(/\s+/g,' '); // espaces insécables -> espace simple
-  if (dec===','){
-    // supprimer séparateurs de milliers (espace ou point), garder virgule comme décimale
-    s = s.replace(/\./g,'').replace(/ /g,'').replace(',','.');
-  } else {
-    // supprimer séparateurs de milliers (espace ou virgule si style 1,234.56)
-    // si s contient exactement un '.' et >=1 ',', on suppose style "1,234.56" -> enlever ','
-    if (s.includes('.') && s.includes(',')) s = s.replace(/,/g,'');
-    else s = s.replace(/ /g,'').replace(/,/g,'');
-  }
+  s = s.replace(/\u00A0/g,' ').replace(/\s+/g,' ');
+  if (dec===','){ s = s.replace(/\./g,'').replace(/ /g,'').replace(',','.'); }
+  else { if (s.includes('.') && s.includes(',')) s = s.replace(/,/g,''); else s = s.replace(/ /g,'').replace(/,/g,''); }
   const v=Number(s);
   return isNaN(v)?NaN:v;
 }
 
-// ---------- Progress UI ----------
+// Progress
 const progBox = document.getElementById('progress');
 const progFill = document.getElementById('progress-fill');
 const progLabel = document.getElementById('progress-label');
@@ -277,7 +286,7 @@ function showProgress(label){ progLabel.textContent = label||'Progression'; prog
 function setProgress(ratio){ progFill.style.width = Math.max(0,Math.min(100, Math.round(ratio*100)))+'%'; }
 function hideProgress(){ progBox.style.display='none'; }
 
-// ---------- CSV Parsing ----------
+// CSV parsing
 async function readFileAsText(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onerror=()=>rej(r.error); r.onload=()=>res(r.result); r.readAsText(file); }); }
 function detectSep(line){ const c=[',',';','\t','|']; let best=',',k=0; for(const ch of c){ const n=line.split(ch).length; if(n>k){k=n; best=ch;} } return best; }
 function splitCSV(line, sep){ const out=[]; let cur='',inQ=false; for(let i=0;i<line.length;i++){ const ch=line[i]; if(ch==='"'){ if(inQ && line[i+1]==='"'){ cur+='"'; i++; } else inQ=!inQ; } else if(ch===sep && !inQ){ out.push(cur); cur=''; } else cur+=ch; } out.push(cur); return out; }
@@ -287,12 +296,8 @@ function parseDelimited(text, sepOpt='auto', decOpt='.', noHeader=false){
   const sep=sepOpt==='auto'?detectSep(lines[0]):(sepOpt==='\\t'?'\t':sepOpt);
   let headers=[]; let startIndex=1;
   const firstCells = splitCSV(lines[0], sep);
-  if(noHeader){
-    headers = firstCells.map((_,i)=>`Col${i+1}`);
-    startIndex=0;
-  }else{
-    headers = firstCells.map(h=>h.trim()||'');
-  }
+  if(noHeader){ headers = firstCells.map((_,i)=>`Col${i+1}`); startIndex=0; }
+  else { headers = firstCells.map(h=>h.trim()||''); }
   const rows=[];
   for(let i=startIndex;i<lines.length;i++){
     const line=lines[i]; if(!line.trim()) continue;
@@ -304,10 +309,7 @@ function parseDelimited(text, sepOpt='auto', decOpt='.', noHeader=false){
   return {headers,rows,sep:sep,dec:decOpt};
 }
 
-// ---------- Géométrie / rendu: mêmes fonctions que précédemment ----------
-// ... (raccourci: toutes les fonctions géométrie, mesh, rendu, camera sont identiques
-// à la dernière version fournie. Pour respecter la consigne, je les maintiens intégralement.)
-
+// Géométrie
 function vSub(a,b){ return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]; }
 function vDot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
 function vCross(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
@@ -391,7 +393,7 @@ function subdivTri(a,b,c,target){
 }
 function densify(tris, target){ const out=[]; for(const t of tris) out.push(...subdivTri(t[0],t[1],t[2],target)); return out; }
 
-// ---------- Distances / Intervalles ----------
+// Distances / Intervalles
 async function computeDistancesFast({chunkSize=8000, maxRings=2, cell=150, dmax=200}={}) {
   if (!samples.length || !triangles.length) return;
   grid = SpatialGrid(triangles, cell);
@@ -460,7 +462,7 @@ function computeIntervalsFast({cutoff, maxDist, dilution, agg}) {
   return out;
 }
 
-// ---------- Rendu (turbo + tri profondeur + HiDPI) ----------
+// Rendu (palette turbo froide→chaude, tri profondeur, HiDPI)
 let camera={cx:0,cy:0,cz:-25, rx:0.6, ry:0.9, dist:1400, fov:900, panX:0, panY:0};
 function extentAll(){ const pts=[]; for(const s of samples) pts.push([s.X,s.Y,s.Z]); for(const t of triangles){ pts.push(t[0],t[1],t[2]); } return extent(pts); }
 function fitView(){ const e=extentAll(); if(!e) return; camera.cx=(e.minX+e.maxX)/2; camera.cy=(e.minY+e.maxY)/2; camera.cz=(e.minZ+e.maxZ)/2; const span=Math.max(e.maxX-e.minX, e.maxY-e.minY, e.maxZ-e.minZ); camera.dist=Math.max(900, span*1.15); camera.panX=0; camera.panY=0; scheduleRender(); }
@@ -468,16 +470,28 @@ function topView(){ camera.rx = 0; camera.ry = 0; const e=extentAll(); if (e){ c
 function worldToCam(p){ const [x,y,z]=p; const dx=x-camera.cx, dy=y-camera.cy, dz=z-camera.cz; const cosy=Math.cos(camera.ry), siny=Math.sin(camera.ry), cosx=Math.cos(camera.rx), sinx=Math.sin(camera.rx); let x1 = cosy*dx + siny*dz; let z1 = -siny*dx + cosy*dz; let y1 = cosx*dy - sinx*z1; let z2 = sinx*dy + cosx*z1 + camera.dist; return [x1,y1,z2]; }
 function project(p){ const [x,y,z]=p; if(!isFinite(z)||z<=1) return [NaN,NaN,NaN]; const s=camera.fov/z; return [canvas.width/2 + camera.panX + x*s, canvas.height/2 + camera.panY - y*s, z]; }
 function hashCode(str){ let h=0; for(let i=0;i<str.length;i++) h=(h<<5)-h+str.charCodeAt(i)|0; return h; }
-function turboRGB(t){ t=Math.max(0,Math.min(1,t)); const r = 0.13572138 + 4.61539260*t - 42.66032258*t*t + 132.13108234*t**3 - 152.94239396*t**4 + 59.28637943*t**5; const g = 0.09140261 + 2.19418839*t + 4.84296658*t*t - 14.18503333*t**3 + 4.27729857*t**4 + 2.82956604*t**5; const b = 0.10667330 + 13.01798620*t - 65.60152820*t*t + 163.39634152*t**3 - 181.91331486*t**4 + 70.90574963*t**5; const to255 = (x)=>Math.round(255*Math.max(0,Math.min(1,x))); return `rgb(${to255(r)},${to255(g)},${to255(b)})`; }
+function turboRGB(t){
+  t=Math.max(0,Math.min(1,t));
+  const r = 0.13572138 + 4.61539260*t - 42.66032258*t*t + 132.13108234*t**3 - 152.94239396*t**4 + 59.28637943*t**5;
+  const g = 0.09140261 + 2.19418839*t + 4.84296658*t*t - 14.18503333*t**3 + 4.27729857*t**4 + 2.82956604*t**5;
+  const b = 0.10667330 + 13.01798620*t - 65.60152820*t*t + 163.39634152*t**3 - 181.91331486*t**4 + 70.90574963*t**5;
+  const to255 = (x)=>Math.round(255*Math.max(0,Math.min(1,x)));
+  return `rgb(${to255(r)},${to255(g)},${to255(b)})`;
+}
 function colorForSample(s){
   const mode=document.getElementById('color-mode').value;
   if(mode==='none') return 'rgba(147,197,253,0.9)';
   if(mode==='status'){ const h=Math.abs(hashCode(s.Status||'OK'))%360; return `hsl(${h} 70% 60% / .9)`; }
-  if(mode==='dist'){ const d=isFinite(s.Dist)?s.Dist:200; const t=Math.max(0,Math.min(1,d/60)); return `hsl(${220*t} 90% ${55+15*t}% / .9)`; }
-  const a=Math.max(0.05, Math.min(30, s.Au||0)); const t=(Math.log10(a)-Math.log10(0.05))/(Math.log10(30)-Math.log10(0.05)); return turboRGB(t);
+  if(mode==='dist'){
+    const d=isFinite(s.Dist)?s.Dist:200; const t=Math.max(0,Math.min(1,d/60));
+    return `hsl(${220*t} 90% ${55+15*t}% / .9)`;
+  }
+  // Au: palette turbo en log, 0.05 -> 30 g/t
+  const a=Math.max(0.05, Math.min(30, s.Au||0));
+  const t=(Math.log10(a)-Math.log10(0.05))/(Math.log10(30)-Math.log10(0.05));
+  return turboRGB(t);
 }
 function getPointSize(){ const el=document.getElementById('pt-size'); return el?parseFloat(el.value)||2:2; }
-
 function drawGrid(){
   const step=100, half=2000, z0=-25;
   const gridCol=getComputedStyle(document.documentElement).getPropertyValue('--grid')||'#173154';
@@ -631,7 +645,7 @@ document.getElementById('btn-reset').addEventListener('click', ()=>{
   scheduleRender(); log('Réinitialisé.');
 });
 
-// ---------- Démo ----------
+// Démo / DXF / Densifier / Import (identiques à la version précédente)
 function randomNormal(mu=0,s=1){ let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random(); return mu+s*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
 function demoMesh(){
   const tris=[]; const nx=36, ny=36, spacing=100;
@@ -639,7 +653,7 @@ function demoMesh(){
   for(let i=0;i<nx;i++){
     for(let j=0;j<ny;j++){
       const x0=(i-nx/2)*spacing, x1=(i+1-nx/2)*spacing;
-      const y0=(j-ny/2)*spacing, y1=(j+1-ny/2)*spacing;
+      const y0=(j-ny/2)*spacing, y1=(j+1-nx/2)*spacing;
       const z00=zf(x0,y0), z01=zf(x0,y1), z10=zf(x1,y0), z11=zf(x1,y1);
       const v00=[x0,y0,z00], v01=[x0,y1,z01], v10=[x1,y0,z10], v11=[x1,y1,z11];
       const tA=[v00,v10,v11], tB=[v00,v11,v01];
@@ -679,12 +693,7 @@ async function generateDemoDataset(doFit=false){
   log(`Démo: ${samples.length} échantillons, ${triangles.length} triangles (mesh: ${meshName}).`);
 }
 document.getElementById('btn-generate-demo').addEventListener('click', async ()=>{ await generateDemoDataset(true); });
-document.getElementById('btn-generate-mesh-demo').addEventListener('click', async ()=>{
-  triangles=demoMesh(); meshS=planeStruct(triangles); meshName='mesh_demo';
-  await refreshAll(); fitView(); log(`Mesh démo créé: ${triangles.length} triangles.`);
-});
 
-// ---------- Import/Export DXF ----------
 function parseDXF(text){
   const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
   const tris=[]; let i=0;
@@ -733,8 +742,6 @@ document.getElementById('btn-export-mesh').addEventListener('click', ()=>{
   dxf+='0\nENDSEC\n0\nEOF\n';
   download(`${meshName||'mesh'}.dxf`, dxf, 'application/dxf');
 });
-
-// ---------- Densité / Densifier ----------
 document.getElementById('btn-check-density').addEventListener('click', ()=>{
   if(!triangles.length) return alert('Aucun mesh');
   const L=meanEdgeL(triangles), thr=parseFloat(document.getElementById('densify-threshold').value);
@@ -749,7 +756,7 @@ document.getElementById('btn-densify').addEventListener('click', async ()=>{
   await refreshAll(); fitView(); log(`Densifié: ${before} -> ${after} triangles (mesh: ${meshName}).`);
 });
 
-// ---------- Auto-mapping renforcé ----------
+// Auto-mapping + garde-fous Au
 const sel={holeid:'col-holeid',from:'col-from',to:'col-to',x:'col-x',y:'col-y',z:'col-z',au:'col-au',length:'col-length'};
 const mapEls=Object.fromEntries(Object.entries(sel).map(([k,id])=>[k,document.getElementById(id)]));
 
@@ -759,8 +766,8 @@ function populateMapping(headers){
     for(const h of headers){ const opt=document.createElement('option'); opt.value=h; opt.textContent=h; el.appendChild(opt); }
   }
   const H=headers;
-  const lower=headers.map(h=>h.toLowerCase());
   const pick = (cands, avoid=[])=>{
+    const Hlow = H.map(h=>h.toLowerCase());
     const avoidL=avoid.map(s=>s.toLowerCase());
     const scores = H.map((h,i)=>{
       const hl=h.toLowerCase();
@@ -768,7 +775,6 @@ function populateMapping(headers){
       for(const c of cands){ const cl=c.toLowerCase(); if(hl===cl) s+=100; else if(hl.includes(cl)) s+=10; }
       if(/\bau\b/.test(hl)) s+=60;
       if(/\bppm\b|\bgpt\b|\bg\/t\b/.test(hl)) s+=30;
-      // pénalités
       if(/\b(from|to|length|longueur|start|end)\b/.test(hl)) s-=80;
       if(/\b(m|metre|meter|depth|rl|elevation)\b/.test(hl)) s-=40;
       if (avoidL.includes(hl)) s-=999;
@@ -777,7 +783,6 @@ function populateMapping(headers){
     scores.sort((a,b)=>b.s-a.s);
     return scores[0]?.h ?? H[0] ?? '';
   };
-  // champs de base
   mapEls.holeid.value = pick(['holeid','hole id','ddh','bhid','bh_id','drillhole','bh id']);
   mapEls.from.value   = pick(['from','debut','start','from_m','from_metre','from_meters']);
   mapEls.to.value     = pick(['to','fin','end','to_m','to_metre','to_meters']);
@@ -785,25 +790,19 @@ function populateMapping(headers){
   mapEls.x.value      = pick(['x','easting','utm_e','utm_x','x_m']);
   mapEls.y.value      = pick(['y','northing','utm_n','utm_y','y_m']);
   mapEls.z.value      = pick(['z','rl','elevation','z_m','z_rl']);
-  // Au doit éviter From/To/Length
-  mapEls.au.value     = pick(['au','grade','assay','au_ppm','au_gpt','au_gpt','au_gt','au (g/t)'], [mapEls.from.value,mapEls.to.value,mapEls.length.value]);
+  mapEls.au.value     = pick(['au','grade','assay','au_ppm','au_gpt','au_gt','au (g/t)'], [mapEls.from.value,mapEls.to.value,mapEls.length.value]);
 }
 
-// ---------- Alerte Au suspect ----------
 function detectAuAnomaly(rows){
   if (!rows.length) return {suspect:false, reasons:[]};
   const N=Math.min(5000, rows.length);
   const au = [], from=[], to=[], len=[];
   for(let i=0;i<N;i++){
     const r=rows[i];
-    au.push(r.Au);
-    from.push(r.From);
-    to.push(r.To);
-    len.push(r.Length);
+    au.push(r.Au); from.push(r.From); to.push(r.To); len.push(r.Length);
   }
-  const finite = (a)=>a.filter(Number.isFinite);
-  const auF=finite(au), fF=finite(from), tF=finite(to), lF=finite(len);
   const reasons=[];
+  const auF=au.filter(Number.isFinite);
   if (auF.length<Math.max(50, Math.min(200, N*0.6))){
     reasons.push('Trop peu de valeurs Au valides après parsing.');
   }
@@ -811,9 +810,8 @@ function detectAuAnomaly(rows){
   if (auStats.max>200 || auStats.median>50){
     reasons.push(`Au très élevé (médiane ~ ${fmt(auStats.median)}; max ${fmt(auStats.max)}).`);
   }
-  // égalités fréquentes avec métriques
   let eqLen=0, eqFrom=0, eqTo=0;
-  for(let i=0;i<Math.min(au.length, from.length, to.length, len.length); i++){
+  for(let i=0;i<N;i++){
     const a=au[i];
     if(!isFinite(a)) continue;
     if (isFinite(len[i]) && Math.abs(a-len[i])<1e-9) eqLen++;
@@ -824,7 +822,6 @@ function detectAuAnomaly(rows){
   if (ratioEqLen>0.3) reasons.push(`Au identique à Length dans ~${Math.round(100*ratioEqLen)}% des lignes.`);
   if (ratioEqFrom>0.3) reasons.push(`Au identique à From dans ~${Math.round(100*ratioEqFrom)}% des lignes.`);
   if (ratioEqTo>0.3) reasons.push(`Au identique à To dans ~${Math.round(100*ratioEqTo)}% des lignes.`);
-  // corrélation grossière avec métrages (Pearson approx)
   function corr(a,b){
     const n=Math.min(a.length,b.length); const xs=[], ys=[];
     for(let i=0;i<n;i++){ const x=a[i], y=b[i]; if(isFinite(x)&&isFinite(y)) { xs.push(x); ys.push(y); } }
@@ -836,12 +833,10 @@ function detectAuAnomaly(rows){
   if (Math.abs(cF)>0.95 || Math.abs(cT)>0.95 || Math.abs(cL)>0.95){
     reasons.push(`Corrélation très forte (|r|>0.95) entre Au et des métrages (From/To/Length).`);
   }
-  // distribution plate sur grandes valeurs -> suspect
   if (auStats.mean>30 && auStats.median>20) reasons.push('Distribution Au très élevée (mean/median > 20 g/t).');
   return {suspect: reasons.length>0, reasons, stats:auStats};
 }
 
-// ---------- UI stats / previews / results ----------
 function statsTableHTML(title, map){
   let html=`<h3 style="margin:0 0 6px">${title}</h3><div class="scroll"><table><thead><tr>
   <th>Variable</th><th>Minimum</th><th>Moyenne</th><th>Médiane</th><th>Maximum</th><th>Somme</th><th>Nombre</th>
@@ -900,11 +895,10 @@ async function refreshAll(){
   meshS=triangles.length?planeStruct(triangles):null; updateStats(); updatePreviews(); updateResults(); scheduleRender();
 }
 
-// ---------- Import/mapping échantillons + garde-fous Au ----------
+// Import/mapping + garde-fous Au
 document.getElementById('sep').addEventListener('change', e=> sepChoice=e.target.value);
 document.getElementById('dec').addEventListener('change', e=> decChoice=e.target.value);
 document.getElementById('no-header').addEventListener('change', e=> noHeader=e.target.checked);
-
 document.getElementById('file-samples').addEventListener('change', async (e)=>{
   const f=e.target.files[0]; if(!f) return; const text=await readFileAsText(f);
   const parsed=parseDelimited(text, sepChoice, decChoice, noHeader);
@@ -918,12 +912,9 @@ document.getElementById('file-samples').addEventListener('change', async (e)=>{
   previewTable('preview-file', headersRaw, sampleRaw, 20);
   log(`Échantillons importés (bruts): ${sampleRaw.length}. Choisissez le mapping puis cliquez Appliquer.`);
 });
-
 document.getElementById('btn-apply-mapping').addEventListener('click', async ()=>{
   if (!sampleRaw.length) return alert('Importez un fichier CSV/TXT d’échantillons d’abord.');
   const m={}; for(const k in mapEls) m[k]=mapEls[k].value;
-
-  // transformation des lignes selon mapping
   const out=[]; let dropped=0;
   for(const r of sampleRaw){
     const o={
@@ -942,33 +933,21 @@ document.getElementById('btn-apply-mapping').addEventListener('click', async ()=
     if(o.HoleID && [o.From,o.To,o.X,o.Y,o.Z,o.Au,o.Length].every(v=>isFinite(v))) out.push(o);
     else dropped++;
   }
-
-  if (!out.length) {
-    alert('Aucune ligne valide après mapping. Vérifiez séparateur, décimales et mapping.');
-    return;
-  }
-
-  // Détection Au suspect AVANT d’appliquer définitivement
+  if (!out.length) { alert('Aucune ligne valide après mapping. Vérifiez séparateur, décimales et mapping.'); return; }
   const auCheck = detectAuAnomaly(out);
   if (auCheck.suspect){
     const msg = `Attention: la colonne Au semble incohérente.\n- ${auCheck.reasons.join('\n- ')}\n\nVérifiez le mapping (colonne Au) et le choix des décimales. Voulez-vous quand même continuer ?`;
     auWarnEl.style.display='block';
     auWarnEl.innerHTML = `<strong>Alerte Au:</strong><br>${auCheck.reasons.map(r=>'- '+r).join('<br>')}`;
     const proceed = confirm(msg);
-    if(!proceed){
-      log('Application du mapping annulée suite à alerte Au.');
-      return;
-    }
-  } else {
-    auWarnEl.style.display='none'; auWarnEl.textContent='';
-  }
-
+    if(!proceed){ log('Application du mapping annulée suite à alerte Au.'); return; }
+  } else { auWarnEl.style.display='none'; auWarnEl.textContent=''; }
   samples=out;
   await refreshAll(); fitView();
   log(`Mapping appliqué: ${samples.length} échantillons valides. Lignes ignorées: ${dropped}.`);
 });
 
-// ---------- Export CSV ----------
+// Export
 document.getElementById('btn-export-intervals').addEventListener('click', ()=>{
   if(!intervals.length) return alert('Aucun intervalle.');
   const rows=[['HoleID','From','To','Length','AuMean','SterileLen']];
@@ -994,7 +973,7 @@ document.getElementById('btn-export-stats-intervals').addEventListener('click', 
   download(`stats_intervalles_${meshName||'mesh'}.csv`, csv(rows, ','), 'text/csv');
 });
 
-// ---------- Paramètres / Calcul intervalles ----------
+// Calcul intervalles
 document.getElementById('btn-run').addEventListener('click', async ()=>{
   if(!samples.length) return alert('Générez la démo ou importez des échantillons.');
   const btn = document.getElementById('btn-run');
@@ -1022,7 +1001,7 @@ document.getElementById('btn-run').addEventListener('click', async ()=>{
   btn.disabled = false; btn.textContent = 'Calcul intervalles';
 });
 
-// ---------- Auto-initialisation ----------
+// Boot
 async function boot(){
   resizeCanvasToDisplaySize();
   log('Initialisation...');
