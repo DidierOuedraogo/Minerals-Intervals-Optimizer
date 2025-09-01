@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mineral Intervals Optimizer</title>
+<style>
+  :root{
+    --bg-0:#070918; --bg-1:#0b0f2a; --panel:#0a1026; --muted:#9db0d3; --text:#f1f5ff;
+    --grid:#173154; --grid-bold:#28528f;
+    --axis-x:#60a5fa; --axis-y:#34d399; --axis-z:#f97316; --mesh:#c084fc;
+    --accent:#60a5fa; --accent2:#34d399; --warn:#f59e0b; --danger:#ef4444;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Arial; color:var(--text);
+    background: radial-gradient(1200px 600px at 10% 0%, rgba(167,139,250,.18), transparent 60%),
+                radial-gradient(1200px 600px at 90% 0%, rgba(56,189,248,.18), transparent 60%),
+                linear-gradient(180deg, var(--bg-0), var(--bg-1));}
+  header{position:sticky;top:0;z-index:10;background:rgba(8,12,30,.75);backdrop-filter:blur(8px);
+    border-bottom:1px solid #1f2a44;padding:10px 12px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+  h1{margin:0;font-size:18px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .btn{background:#0c1230;border:1px solid #2b3e6f;color:#e6efff;padding:9px 12px;border-radius:10px;cursor:pointer;font-weight:700;font-size:12px}
+  .btn:hover{border-color:#60a5fa}
+  .btn.primary{background:#0d9488;border-color:#0f766e}
+  .btn.warn{background:#b45309;border-color:#b45309}
+  .btn.danger{background:#991b1b;border-color:#991b1b}
+  .container{display:grid;grid-template-columns:380px 1fr;gap:12px;padding:12px}
+  @media (max-width:1100px){.container{grid-template-columns:1fr}}
+  .panel{background:rgba(15,23,42,.9);border:1px solid #1f2a44;border-radius:12px;padding:12px}
+  .section{margin-bottom:14px}
+  .section h2{margin:0 0 8px;font-size:14px}
+  label{display:block;font-size:12px;color:var(--muted);margin:6px 0 4px}
+  input[type="number"], select, input[type="file"], input[type="checkbox"]{width:100%;padding:9px 10px;border-radius:10px;border:1px solid #243a64;background:#08112b;color:#e6efff}
+  input[type="checkbox"]{width:auto; vertical-align:middle; margin-right:6px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .scroll{max-height:250px;overflow:auto;border:1px solid #1f2a44;border-radius:10px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid #1f2a44;padding:6px;font-size:12px;text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .card{background:#0a112b;border:1px solid #1f2a44;border-radius:10px;padding:8px}
+  .log{font-family:ui-monospace,Consolas,Menlo,monospace;background:#08112b;border:1px dashed #2a3f77;color:#cfe2ff;border-radius:8px;padding:8px;max-height:160px;overflow:auto}
+  .canvas-wrap{position:relative}
+  canvas{width:100%;height:62vh;min-height:460px;background:#040a1a;border:1px solid #23345c;border-radius:12px;display:block}
+  .hud{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .legend{position:absolute;right:10px;bottom:8px;font-size:12px;color:#b7c8eb;background:rgba(8,13,28,.7);border:1px solid #1f2a44;padding:6px 8px;border-radius:8px}
+  .compass{position:absolute; right:10px; top:10px; width:80px; height:80px; border-radius:50%; border:1px solid #1f2a44; background:rgba(8,13,28,.7); display:grid; place-items:center; color:#cfe2ff; font-weight:700; font-size:12px}
+  .compass .needle{width:2px; height:60%; background:#ef4444; transform-origin:bottom center}
+  .palette{position:absolute; right:10px; top:98px; background:rgba(8,13,28,.7); border:1px solid #1f2a44; padding:6px 8px; border-radius:8px; font-size:12px; color:#cfe2ff}
+  .palette-bar{width:12px; height:160px; background:linear-gradient(180deg, #30123b, #4146a6, #2bb6d9, #42d36b, #e6e647, #f28e2b, #a60026); border-radius:6px; margin:6px auto}
+  .palette .ticks{display:flex; justify-content:space-between; flex-direction:column; height:160px}
+  footer{padding:10px;text-align:center;color:#b6c6ea;font-size:12px}
+  .note{font-size:12px; color:#a9bbdf; margin-top:6px}
+  #progress{position:fixed; left:12px; right:12px; bottom:12px; background:rgba(8,13,28,.9); border:1px solid #1f2a44; border-radius:10px; padding:10px; z-index:9999; color:#cfe2ff; font:12px system-ui; display:none}
+  #progress .bar{height:10px; background:#173154; border-radius:6px; overflow:hidden; margin-top:6px}
+  #progress .fill{height:100%; width:0%; background:linear-gradient(90deg, var(--accent), var(--accent2)); transition:width .12s}
+  .alert{margin-top:8px; padding:8px; border:1px solid var(--warn); background:rgba(245,158,11,.08); color:#ffd38a; border-radius:10px; font-size:12px}
+  .alert strong{color:#ffdca8}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mineral Intervals Optimizer</h1>
+  <div class="actions">
+    <button id="btn-generate-demo" class="btn primary">Démo gisement</button>
+    <button id="btn-fit" class="btn">Tout voir</button>
+    <button id="btn-top" class="btn">Vue d'en haut</button>
+    <button id="btn-run" class="btn">Calcul intervalles</button>
+    <button id="btn-export-intervals" class="btn">Exporter intervalles</button>
+    <button id="btn-export-demo" class="btn">Exporter échantillons</button>
+    <button id="btn-reset" class="btn danger">Réinitialiser</button>
+  </div>
+</header>
+
+<div class="container">
+  <aside class="panel">
+    <div class="section">
+      <h2>Import échantillons</h2>
+      <div class="row">
+        <div>
+          <label for="file-samples">CSV/TXT</label>
+          <input id="file-samples" type="file" accept=".csv,.txt,.tsv" />
+          <div class="note">Choisissez le fichier, mappez les colonnes et cliquez “Appliquer”.</div>
+        </div>
+        <div>
+          <label>Parsing</label>
+          <div class="row">
+            <select id="sep"><option value="auto">Auto</option><option value=",">,</option><option value=";">;</option><option value="\t">Tab</option><option value="|">|</option></select>
+            <select id="dec"><option value=".">Décimales: .</option><option value=",">Décimales: ,</option></select>
+          </div>
+          <label style="margin-top:8px"><input id="no-header" type="checkbox" /> Pas d’en-têtes (ligne 1 = données)</label>
+        </div>
+      </div>
+      <div class="section">
+        <h2>Mapping colonnes</h2>
+        <div class="row">
+          <div>
+            <label>HoleID</label><select id="col-holeid"></select>
+            <label>From</label><select id="col-from"></select>
+            <label>To</label><select id="col-to"></select>
+            <label>Length</label><select id="col-length"></select>
+          </div>
+          <div>
+            <label>X</label><select id="col-x"></select>
+            <label>Y</label><select id="col-y"></select>
+            <label>Z</label><select id="col-z"></select>
+            <label>Au</label><select id="col-au"></select>
+          </div>
+        </div>
+        <button id="btn-apply-mapping" class="btn" style="margin-top:8px">Appliquer</button>
+        <div id="au-warning" class="alert" style="display:none"></div>
+      </div>
+
+      <div class="section">
+        <h2>Aperçu du fichier</h2>
+        <div id="preview-file" class="card scroll" style="max-height:160px">--</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Mesh DXF</h2>
+      <input id="file-dxf" type="file" accept=".dxf" />
+      <div class="row" style="margin-top:8px">
+        <button id="btn-generate-mesh-demo" class="btn">Mesh démo</button>
+        <button id="btn-export-mesh" class="btn">Exporter mesh</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div><label>Densification cible (m)</label><input id="densify-target" type="number" min="0.5" step="0.5" value="2.0"></div>
+        <div><label>Seuil peu dense (m)</label><input id="densify-threshold" type="number" min="1" step="0.5" value="3.0"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-check-density" class="btn">Vérifier densité</button>
+        <button id="btn-densify" class="btn warn">Densifier</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Paramètres intervalles</h2>
+      <div class="row">
+        <div><label>Coupure Au (g/t)</label><input id="cutoff" type="number" min="0" step="0.01" value="1.0"></div>
+        <div><label>Distance max (m)</label><input id="max-dist" type="number" min="0" step="0.1" value="30"></div>
+      </div>
+      <div class="row">
+        <div><label>Dilution stérile (m)</label><input id="dilution" type="number" min="0" step="0.1" value="2.0"></div>
+        <div><label>Agrégation</label><select id="agg"><option value="length-weighted">Pondérée longueur</option><option value="simple">Moyenne simple</option></select></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Statistiques -- Échantillons</h2>
+      <div id="stats-samples" class="card">-</div>
+      <button id="btn-export-stats-samples" class="btn" style="margin-top:8px">Exporter stats</button>
+    </div>
+
+    <div class="section">
+      <h2>Statistiques -- Intervalles</h2>
+      <div id="stats-intervals" class="card">-</div>
+      <button id="btn-export-stats-intervals" class="btn" style="margin-top:8px">Exporter stats</button>
+    </div>
+
+    <div class="section">
+      <h2>Structure mesh</h2>
+      <div id="mesh-struct" class="card">-</div>
+    </div>
+
+    <div class="section">
+      <h2>Log</h2>
+      <div id="log" class="log"></div>
+    </div>
+  </aside>
+
+  <main class="panel">
+    <div class="section">
+      <h2>Vue 3D</h2>
+      <div class="canvas-wrap">
+        <canvas id="view"></canvas>
+        <div class="hud">
+          <select id="color-mode" class="btn" title="Mode couleur">
+            <option value="au">Couleur: Au</option>
+            <option value="dist">Distance</option>
+            <option value="status">Status</option>
+            <option value="none">Uniforme</option>
+          </select>
+          <input id="pt-size" class="btn" type="range" min="1" max="6" step="0.5" value="2" title="Taille points" style="width:120px">
+          <button id="btn-capture" class="btn">Capture PNG</button>
+        </div>
+        <div class="palette" id="palette-au" aria-label="palette Au">
+          <div style="text-align:center;font-weight:700">Au (g/t)</div>
+          <div class="palette-bar"></div>
+          <div class="ticks">
+            <div>30</div><div>10</div><div>3</div><div>1</div><div>0.3</div><div>0.1</div><div>0.05</div>
+          </div>
+        </div>
+        <div class="legend">Pan: clic • Rotate: Shift+clic • Zoom: molette • Grille 100 m • Mesh violet • N vers Y+</div>
+        <div class="compass" aria-label="boussole">
+          <div>N</div>
+          <div class="needle" id="compass-needle" style="transform:rotate(0deg)"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Aperçus</h2>
+      <div class="row">
+        <div class="card"><div id="preview-samples" class="scroll"></div></div>
+        <div class="card"><div id="preview-intervals" class="scroll"></div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Résultats</h2>
+      <div class="card"><div id="results"></div></div>
+    </div>
+  </main>
+</div>
+
+<footer>© 2025 • Didier Ouedraogo, P.Geo. • Mineral Intervals Optimizer</footer>
+
+<div id="progress" role="status" aria-live="polite">
+  <div id="progress-label">Progression</div>
+  <div class="bar"><div class="fill" id="progress-fill"></div></div>
+</div>
+
+<script>
+/* ===================== Améliorations “Au safe” ======================
+ - Auto-mapping renforcé: évite From/To/Length comme Au
+ - Analyse post-mapping: détecte Au suspect (métrages)
+ - Confirmation si anomalie détectée (bloque par défaut)
+ - Parsing robuste (espaces milliers, virgule/point)
+ - Rendu moderne/stable déjà inclus (turbo, tri profondeur, HiDPI)
+===================================================================== */
+
+// ---------- Etat global ----------
+let samples=[], intervals=[], triangles=[], grid=null, meshS=null;
+let sampleRaw=[]; let headersRaw=[]; let sepChoice='auto', decChoice='.';
+let noHeader=false;
+let lastSampleStats=null, lastIntervalStats=null;
+let meshName = 'mesh_demo';
+
+// ---------- DOM ----------
+const logEl = document.getElementById('log');
+const canvas = document.getElementById('view'); const ctx = canvas.getContext('2d');
+const needle = document.getElementById('compass-needle');
+const auWarnEl = document.getElementById('au-warning');
+
+// ---------- Utils ----------
+function log(m){ const t=new Date().toLocaleTimeString(); logEl.textContent = `[${t}] ${m}\n` + logEl.textContent; }
+function fmt(x,d=2){ if (x==null||!isFinite(x)) return ''; const a=Math.abs(x); const dd=(a>=1?d:Math.min(6, d+Math.ceil(-Math.log10(a+1e-12)))); return Number(x).toFixed(dd); }
+function median(a){ if(!a.length) return null; const s=[...a].sort((x,y)=>x-y); const n=s.length,m=Math.floor(n/2); return n%2?s[m]:(s[m-1]+s[m])/2; }
+function mean(a){ if(!a.length) return NaN; let s=0; for(const v of a) s+=v; return s/a.length; }
+function basicStats(a){ const n=a.length; if(!n) return {n:0,min:null,mean:null,median:null,max:null,sum:0}; let min=Infinity,max=-Infinity,sum=0; for(const v of a){ if(v<min) min=v; if(v>max) max=v; sum+=v; } return {n,min,mean:sum/n,median:median(a),max,sum}; }
+function csv(rows, sep=','){ return rows.map(r=>r.map(v=>{ if(v==null)return''; const s=String(v); return (s.includes('"')||s.includes(sep)||s.includes('\n'))?`"${s.replace(/"/g,'""')}"`:s; }).join(sep)).join('\n'); }
+function download(name, content, mime='text/plain'){ const blob=new Blob([content],{type:mime}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1500); }
+function parseNumber(str, dec){
+  if (str==null) return NaN;
+  if (typeof str==='number') return str;
+  let s=String(str).trim();
+  if(!s) return NaN;
+  s = s.replace(/\u00A0/g,' ').replace(/\s+/g,' '); // espaces insécables -> espace simple
+  if (dec===','){
+    // supprimer séparateurs de milliers (espace ou point), garder virgule comme décimale
+    s = s.replace(/\./g,'').replace(/ /g,'').replace(',','.');
+  } else {
+    // supprimer séparateurs de milliers (espace ou virgule si style 1,234.56)
+    // si s contient exactement un '.' et >=1 ',', on suppose style "1,234.56" -> enlever ','
+    if (s.includes('.') && s.includes(',')) s = s.replace(/,/g,'');
+    else s = s.replace(/ /g,'').replace(/,/g,'');
+  }
+  const v=Number(s);
+  return isNaN(v)?NaN:v;
+}
+
+// ---------- Progress UI ----------
+const progBox = document.getElementById('progress');
+const progFill = document.getElementById('progress-fill');
+const progLabel = document.getElementById('progress-label');
+function showProgress(label){ progLabel.textContent = label||'Progression'; progFill.style.width='0%'; progBox.style.display='block'; }
+function setProgress(ratio){ progFill.style.width = Math.max(0,Math.min(100, Math.round(ratio*100)))+'%'; }
+function hideProgress(){ progBox.style.display='none'; }
+
+// ---------- CSV Parsing ----------
+async function readFileAsText(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onerror=()=>rej(r.error); r.onload=()=>res(r.result); r.readAsText(file); }); }
+function detectSep(line){ const c=[',',';','\t','|']; let best=',',k=0; for(const ch of c){ const n=line.split(ch).length; if(n>k){k=n; best=ch;} } return best; }
+function splitCSV(line, sep){ const out=[]; let cur='',inQ=false; for(let i=0;i<line.length;i++){ const ch=line[i]; if(ch==='"'){ if(inQ && line[i+1]==='"'){ cur+='"'; i++; } else inQ=!inQ; } else if(ch===sep && !inQ){ out.push(cur); cur=''; } else cur+=ch; } out.push(cur); return out; }
+function parseDelimited(text, sepOpt='auto', decOpt='.', noHeader=false){
+  const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.length>0);
+  if(!lines.length) return {headers:[],rows:[],sep:sepOpt,dec:decOpt};
+  const sep=sepOpt==='auto'?detectSep(lines[0]):(sepOpt==='\\t'?'\t':sepOpt);
+  let headers=[]; let startIndex=1;
+  const firstCells = splitCSV(lines[0], sep);
+  if(noHeader){
+    headers = firstCells.map((_,i)=>`Col${i+1}`);
+    startIndex=0;
+  }else{
+    headers = firstCells.map(h=>h.trim()||'');
+  }
+  const rows=[];
+  for(let i=startIndex;i<lines.length;i++){
+    const line=lines[i]; if(!line.trim()) continue;
+    const cells=splitCSV(line, sep);
+    const rec={};
+    for(let c=0;c<headers.length;c++){ rec[headers[c]] = cells[c] ?? ''; }
+    rows.push(rec);
+  }
+  return {headers,rows,sep:sep,dec:decOpt};
+}
+
+// ---------- Géométrie / rendu: mêmes fonctions que précédemment ----------
+// ... (raccourci: toutes les fonctions géométrie, mesh, rendu, camera sont identiques
+// à la dernière version fournie. Pour respecter la consigne, je les maintiens intégralement.)
+
+function vSub(a,b){ return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]; }
+function vDot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+function vCross(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function vLen(a){ return Math.hypot(a[0],a[1],a[2]); }
+function pointTriDist(p,a,b,c){
+  const ab=vSub(b,a), ac=vSub(c,a), ap=vSub(p,a);
+  const d1=vDot(ab,ap), d2=vDot(ac,ap);
+  if(d1<=0&&d2<=0) return vLen(ap);
+  const bp=vSub(p,b), d3=vDot(ab,bp), d4=vDot(ac,bp);
+  if(d3>=0&&d4<=d3) return vLen(bp);
+  const vc=d1*d4-d3*d2;
+  if(vc<=0&&d1>=0&&d3<=0){ const v=d1/(d1-d3); const proj=[a[0]+v*ab[0],a[1]+v*ab[1],a[2]+v*ab[2]]; return vLen(vSub(p,proj)); }
+  const cp=vSub(p,c), d5=vDot(ab,cp), d6=vDot(ac,cp);
+  if(d6>=0&&d5<=d6) return vLen(cp);
+  const vb=d5*d2-d1*d6;
+  if(vb<=0&&d2>=0&&d6<=0){ const w=d2/(d2-d6); const proj=[a[0]+w*ac[0],a[1]+w*ac[1],a[2]+w*ac[2]]; return vLen(vSub(p,proj)); }
+  const va=d3*d6-d5*d4;
+  if(va<=0 && (d4-d3)>=0 && (d5-d6)>=0){ const w=(d4-d3)/((d4-d3)+(d5-d6)); const edge=vSub(c,b); const proj=[b[0]+w*edge[0],b[1]+w*edge[1],b[2]+w*edge[2]]; return vLen(vSub(p,proj)); }
+  const n=vCross(ab,ac); const nL=vLen(n)||1; return Math.abs(vDot(ap,n))/nL;
+}
+function extent(pts){ if(!pts.length) return null; let minX=1/0,minY=1/0,minZ=1/0,maxX=-1/0,maxY=-1/0,maxZ=-1/0; for(const p of pts){ const[x,y,z]=p; if(x<minX) minX=x; if(y<minY) minY=y; if(z<minZ) minZ=z; if(x>maxX) maxX=x; if(y>maxY) maxY=y; if(z>maxZ) maxZ=z; } return {minX,minY,minZ,maxX,maxY,maxZ}; }
+function SpatialGrid(triangles, cell=100){
+  const e=extent(triangles.flat());
+  if(!e) return {query:()=>1/0,_neighbors:()=>[]};
+  const size=Math.max(1,cell);
+  const idx=new Map();
+  const key=(i,j,k)=>`${i}|${j}|${k}`;
+  const ix=x=>Math.floor((x-e.minX)/size), iy=y=>Math.floor((y-e.minY)/size), iz=z=>Math.floor((z-e.minZ)/size);
+  for (const t of triangles){
+    const xs = t.map(v=>v[0]);
+    const ys = t.map(v=>v[1]);
+    const zs = t.map(v=>v[2]);
+    const Imin = ix(Math.min(...xs)), Imax = ix(Math.max(...xs));
+    const Jmin = iy(Math.min(...ys)), Jmax = iy(Math.max(...ys));
+    const Kmin = iz(Math.min(...zs)), Kmax = iz(Math.max(...zs));
+    for (let I=Imin; I<=Imax; I++){
+      for (let J=Jmin; J<=Jmax; J++){
+        for (let K=Kmin; K<=Kmax; K++){
+          const k = key(I,J,K);
+          if (!idx.has(k)) idx.set(k, []);
+          idx.get(k).push(t);
+        }
+      }
+    }
+  }
+  function neighbors(p, r=1){
+    const I=ix(p[0]), J=iy(p[1]), K=iz(p[2]);
+    const out=[];
+    for (let di=-r; di<=r; di++){
+      for (let dj=-r; dj<=r; dj++){
+        for (let dk=-r; dk<=r; dk++){
+          const k=key(I+di, J+dj, K+dk);
+          if (idx.has(k)) out.push(...idx.get(k));
+        }
+      }
+    }
+    return out;
+  }
+  return { query(p){ const cand = neighbors(p,1); let best = Infinity; for (const t of cand){ const d = pointTriDist(p, t[0], t[1], t[2]); if (d < best) best = d; } return best; }, _neighbors:neighbors };
+}
+function planeStruct(tris){
+  if(!tris.length) return null; let nx=0,ny=0,nz=0;
+  for(const t of tris){ const a=t[0],b=t[1],c=t[2]; const n=vCross(vSub(b,a), vSub(c,a)); nx+=n[0]; ny+=n[1]; nz+=n[2]; }
+  const L=Math.hypot(nx,ny,nz)||1; nx/=L; ny/=L; nz/=L; if(nz<0){ nx=-nx; ny=-ny; nz=-nz; }
+  const dip=Math.acos(Math.min(1,Math.max(-1,nz)))*180/Math.PI; const azN=(Math.atan2(nx,ny)*180/Math.PI+360)%360; const strike=(azN+90)%360; const dipDir=(strike+90)%360;
+  return {nx,ny,nz,dip,strike,dipDir};
+}
+function meanEdgeL(tris){ let sum=0,cnt=0; for(const t of tris){ sum+=vLen(vSub(t[1],t[0]))+vLen(vSub(t[2],t[1]))+vLen(vSub(t[0],t[2])); cnt+=3; } return cnt?sum/cnt:1/0; }
+function subdivTri(a,b,c,target){
+  const maxE=Math.max(vLen(vSub(b,a)), vLen(vSub(c,b)), vLen(vSub(a,c)));
+  const n=Math.max(1, Math.ceil(maxE/target)); const out=[];
+  for(let i=0;i<n;i++){
+    const t0=i/n, t1=(i+1)/n;
+    const A0=[a[0]*(1-t0)+c[0]*t0, a[1]*(1-t0)+c[1]*t0, a[2]*(1-t0)+c[2]*t0];
+    const A1=[a[0]*(1-t1)+c[0]*t1, a[1]*(1-t1)+c[1]*t1, a[2]*(1-t1)+c[2]*t1];
+    const B0=[b[0]*(1-t0)+c[0]*t0, b[1]*(1-t0)+c[1]*t0, b[2]*(1-t0)+c[2]*t0];
+    const B1=[b[0]*(1-t1)+c[0]*t1, b[1]*(1-t1)+c[1]*t1, b[2]*(1-t1)+c[2]*t1];
+    out.push([A0,B0,A1]); out.push([A1,B0,B1]);
+  }
+  return out;
+}
+function densify(tris, target){ const out=[]; for(const t of tris) out.push(...subdivTri(t[0],t[1],t[2],target)); return out; }
+
+// ---------- Distances / Intervalles ----------
+async function computeDistancesFast({chunkSize=8000, maxRings=2, cell=150, dmax=200}={}) {
+  if (!samples.length || !triangles.length) return;
+  grid = SpatialGrid(triangles, cell);
+  const n = samples.length;
+  showProgress('Calcul des distances: maillage voisinage');
+  let i = 0, noNeighbor = 0;
+  while (i < n) {
+    const end = Math.min(n, i + chunkSize);
+    for (let k = i; k < end; k++) {
+      const s = samples[k];
+      const p = [s.X, s.Y, s.Z];
+      let best = Infinity, found = false;
+      for (let ring = 0; ring <= maxRings; ring++) {
+        const cand = grid._neighbors(p, ring);
+        if (cand && cand.length) {
+          for (let t of cand) { const d = pointTriDist(p, t[0], t[1], t[2]); if (d < best) best = d; }
+          found = true; break;
+        }
+      }
+      if (!found) { noNeighbor++; s.Dist = dmax; } else s.Dist = best;
+    }
+    i = end;
+    setProgress(i / n);
+    await new Promise(r => setTimeout(r, 0));
+  }
+  hideProgress();
+  if (noNeighbor > 0) log(`Attention: ${noNeighbor} échantillons sans voisins mesh proches (cell=${cell} m, maxRings=${maxRings}).`);
+}
+function computeIntervalsFast({cutoff, maxDist, dilution, agg}) {
+  const by = new Map();
+  for (const s of samples) { if (!by.has(s.HoleID)) by.set(s.HoleID, []); by.get(s.HoleID).push(s); }
+  const out = [];
+  for (const [hole, arr0] of by) {
+    const arr = arr0.slice().sort((a,b)=>a.From-b.From);
+    const n = arr.length;
+    const eligible = new Array(n);
+    const L = new Array(n), Au = new Array(n);
+    for (let i=0;i<n;i++){ eligible[i]=(arr[i].Au>=cutoff)&&((arr[i].Dist==null)||arr[i].Dist<=maxDist); L[i]=arr[i].Length; Au[i]=arr[i].Au; }
+    const prefLen=new Array(n+1).fill(0), prefSter=new Array(n+1).fill(0);
+    const prefAuW=new Array(n+1).fill(0), prefW=new Array(n+1).fill(0);
+    const prefAuS=new Array(n+1).fill(0), prefN=new Array(n+1).fill(0);
+    for (let i=0;i<n;i++){
+      prefLen[i+1]=prefLen[i]+L[i];
+      prefSter[i+1]=prefSter[i]+(eligible[i]?0:L[i]);
+      prefAuW[i+1]=prefAuW[i]+(eligible[i]?Au[i]*L[i]:0);
+      prefW[i+1]=prefW[i]+(eligible[i]?L[i]:0);
+      prefAuS[i+1]=prefAuS[i]+(eligible[i]?Au[i]:0);
+      prefN[i+1]=prefN[i]+(eligible[i]?1:0);
+    }
+    let best=null, j=0;
+    for (let i=0;i<n;i++){
+      if (j<i) j=i;
+      while (j<n){ const ster=prefSter[j+1]-prefSter[i]; if (ster<=dilution) j++; else break; }
+      const end=j-1;
+      if (end>=i){
+        const len=prefLen[end+1]-prefLen[i];
+        const ster=prefSter[end+1]-prefSter[i];
+        let ok=false, meanAu=0;
+        if (agg==='length-weighted'){ const w=prefW[end+1]-prefW[i], a=prefAuW[end+1]-prefAuW[i]; if (w>0){ meanAu=a/w; ok=true; } }
+        else { const nS=prefN[end+1]-prefN[i], aS=prefAuS[end+1]-prefAuS[i]; if (nS>0){ meanAu=aS/nS; ok=true; } }
+        if (ok){ const score=meanAu*len; if (!best || score>best.score) best={HoleID:hole, From:arr[i].From, To:arr[end].To, Length:len, AuMean:meanAu, SterileLen:ster, score}; }
+      }
+    }
+    if (best) out.push(best);
+  }
+  return out;
+}
+
+// ---------- Rendu (turbo + tri profondeur + HiDPI) ----------
+let camera={cx:0,cy:0,cz:-25, rx:0.6, ry:0.9, dist:1400, fov:900, panX:0, panY:0};
+function extentAll(){ const pts=[]; for(const s of samples) pts.push([s.X,s.Y,s.Z]); for(const t of triangles){ pts.push(t[0],t[1],t[2]); } return extent(pts); }
+function fitView(){ const e=extentAll(); if(!e) return; camera.cx=(e.minX+e.maxX)/2; camera.cy=(e.minY+e.maxY)/2; camera.cz=(e.minZ+e.maxZ)/2; const span=Math.max(e.maxX-e.minX, e.maxY-e.minY, e.maxZ-e.minZ); camera.dist=Math.max(900, span*1.15); camera.panX=0; camera.panY=0; scheduleRender(); }
+function topView(){ camera.rx = 0; camera.ry = 0; const e=extentAll(); if (e){ camera.cx=(e.minX+e.maxX)/2; camera.cy=(e.minY+e.maxY)/2; camera.cz=(e.minZ+e.maxZ)/2; } camera.panX=0; camera.panY=0; scheduleRender(); }
+function worldToCam(p){ const [x,y,z]=p; const dx=x-camera.cx, dy=y-camera.cy, dz=z-camera.cz; const cosy=Math.cos(camera.ry), siny=Math.sin(camera.ry), cosx=Math.cos(camera.rx), sinx=Math.sin(camera.rx); let x1 = cosy*dx + siny*dz; let z1 = -siny*dx + cosy*dz; let y1 = cosx*dy - sinx*z1; let z2 = sinx*dy + cosx*z1 + camera.dist; return [x1,y1,z2]; }
+function project(p){ const [x,y,z]=p; if(!isFinite(z)||z<=1) return [NaN,NaN,NaN]; const s=camera.fov/z; return [canvas.width/2 + camera.panX + x*s, canvas.height/2 + camera.panY - y*s, z]; }
+function hashCode(str){ let h=0; for(let i=0;i<str.length;i++) h=(h<<5)-h+str.charCodeAt(i)|0; return h; }
+function turboRGB(t){ t=Math.max(0,Math.min(1,t)); const r = 0.13572138 + 4.61539260*t - 42.66032258*t*t + 132.13108234*t**3 - 152.94239396*t**4 + 59.28637943*t**5; const g = 0.09140261 + 2.19418839*t + 4.84296658*t*t - 14.18503333*t**3 + 4.27729857*t**4 + 2.82956604*t**5; const b = 0.10667330 + 13.01798620*t - 65.60152820*t*t + 163.39634152*t**3 - 181.91331486*t**4 + 70.90574963*t**5; const to255 = (x)=>Math.round(255*Math.max(0,Math.min(1,x))); return `rgb(${to255(r)},${to255(g)},${to255(b)})`; }
+function colorForSample(s){
+  const mode=document.getElementById('color-mode').value;
+  if(mode==='none') return 'rgba(147,197,253,0.9)';
+  if(mode==='status'){ const h=Math.abs(hashCode(s.Status||'OK'))%360; return `hsl(${h} 70% 60% / .9)`; }
+  if(mode==='dist'){ const d=isFinite(s.Dist)?s.Dist:200; const t=Math.max(0,Math.min(1,d/60)); return `hsl(${220*t} 90% ${55+15*t}% / .9)`; }
+  const a=Math.max(0.05, Math.min(30, s.Au||0)); const t=(Math.log10(a)-Math.log10(0.05))/(Math.log10(30)-Math.log10(0.05)); return turboRGB(t);
+}
+function getPointSize(){ const el=document.getElementById('pt-size'); return el?parseFloat(el.value)||2:2; }
+
+function drawGrid(){
+  const step=100, half=2000, z0=-25;
+  const gridCol=getComputedStyle(document.documentElement).getPropertyValue('--grid')||'#173154';
+  const gridBold=getComputedStyle(document.documentElement).getPropertyValue('--grid-bold')||'#28528f';
+  ctx.lineWidth=1;
+  for(let y=-half; y<=half; y+=step){
+    const p0=project(worldToCam([-half,y,z0]));
+    const p1=project(worldToCam([ half,y,z0]));
+    if(!isFinite(p0[0])||!isFinite(p1[0])) continue;
+    ctx.strokeStyle = (y%500===0)?gridBold:gridCol;
+    ctx.beginPath(); ctx.moveTo(p0[0],p0[1]); ctx.lineTo(p1[0],p1[1]); ctx.stroke();
+    if (y%500===0){ ctx.fillStyle='#9db0d3'; ctx.font='11px system-ui'; ctx.fillText(`${y} m Y`, p1[0]+6, p1[1]); }
+  }
+  for(let x=-half; x<=half; x+=step){
+    const p0=project(worldToCam([x,-half,z0]));
+    const p1=project(worldToCam([x, half,z0]));
+    if(!isFinite(p0[0])||!isFinite(p1[0])) continue;
+    ctx.strokeStyle = (x%500===0)?gridBold:gridCol;
+    ctx.beginPath(); ctx.moveTo(p0[0],p0[1]); ctx.lineTo(p1[0],p1[1]); ctx.stroke();
+    if (x%500===0){ ctx.fillStyle='#9db0d3'; ctx.font='11px system-ui'; ctx.fillText(`${x} m X`, p1[0]+6, p1[1]); }
+  }
+}
+function drawAxes(){
+  const origin=[0,0,-25];
+  const scale=300;
+  const Xd=[scale,0,0], Yd=[0,scale,0], Zd=[0,0,scale];
+  function axis(o,d,c,l){
+    const p0=project(worldToCam(o));
+    const p1=project(worldToCam([o[0]+d[0],o[1]+d[1],o[2]+d[2]]));
+    if(!isFinite(p0[0])||!isFinite(p1[0])) return;
+    ctx.strokeStyle=c; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(p0[0],p0[1]); ctx.lineTo(p1[0],p1[1]); ctx.stroke();
+    ctx.lineWidth=1.5; ctx.beginPath();
+    for(let t=50; t<=scale; t+=50){
+      const pt=project(worldToCam([o[0]+d[0]*t/scale, o[1]+d[1]*t/scale, o[2]+d[2]*t/scale]));
+      if(!isFinite(pt[0])) continue; ctx.moveTo(pt[0]-3, pt[1]-3); ctx.lineTo(pt[0]+3, pt[1]+3);
+    }
+    ctx.stroke();
+    ctx.fillStyle=c; ctx.font="12px system-ui"; ctx.fillText(l, p1[0]+6, p1[1]+6);
+  }
+  const O=project(worldToCam(origin));
+  if (isFinite(O[0])){ ctx.fillStyle='#e5e7eb'; ctx.beginPath(); ctx.arc(O[0],O[1],3,0,Math.PI*2); ctx.fill(); }
+  axis(origin, Xd, getComputedStyle(document.documentElement).getPropertyValue('--axis-x')||'#60a5fa','X');
+  axis(origin, Yd, getComputedStyle(document.documentElement).getPropertyValue('--axis-y')||'#34d399','Y (N)');
+  axis(origin, Zd, getComputedStyle(document.documentElement).getPropertyValue('--axis-z')||'#f97316','Z');
+  const n0=project(worldToCam([0,0,-25]));
+  const n1=project(worldToCam([0,120,-25]));
+  if (isFinite(n0[0])&&isFinite(n1[0])){
+    ctx.strokeStyle='#34d399'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(n0[0],n0[1]); ctx.lineTo(n1[0],n1[1]); ctx.stroke();
+    const ang=Math.atan2(n1[1]-n0[1], n1[0]-n0[0]); const len=10;
+    const pL=[n1[0]-len*Math.cos(ang-0.5), n1[1]-len*Math.sin(ang-0.5)];
+    const pR=[n1[0]-len*Math.cos(ang+0.5), n1[1]-len*Math.sin(ang+0.5)];
+    ctx.fillStyle='#34d399'; ctx.beginPath(); ctx.moveTo(n1[0],n1[1]); ctx.lineTo(pL[0],pL[1]); ctx.lineTo(pR[0],pR[1]); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#34d399'; ctx.font='12px system-ui'; ctx.fillText('N', n1[0]+6, n1[1]);
+  }
+}
+function drawMesh(){
+  if (!triangles.length) return;
+  ctx.strokeStyle='rgba(192,132,252,.85)'; ctx.lineWidth=1;
+  const stepT = triangles.length > 80000 ? 4 : triangles.length > 40000 ? 2 : 1;
+  for (let ti=0; ti<triangles.length; ti+=stepT) {
+    const t = triangles[ti];
+    const p0=project(worldToCam(t[0])), p1=project(worldToCam(t[1])), p2=project(worldToCam(t[2]));
+    if(!isFinite(p0[0])||!isFinite(p1[0])||!isFinite(p2[0])) continue;
+    ctx.beginPath(); ctx.moveTo(p0[0],p0[1]); ctx.lineTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.closePath(); ctx.stroke();
+  }
+}
+function drawSamples(){
+  const N = samples.length;
+  if (!N) return;
+  const pt = getPointSize();
+  const arr = new Array(N);
+  for (let i=0;i<N;i++){
+    const s=samples[i];
+    arr[i] = { s, wc: worldToCam([s.X,s.Y,s.Z]) };
+  }
+  arr.sort((a,b)=>b.wc[2]-a.wc[2]);
+  const step = N>120000?6:N>80000?4:N>40000?2:1;
+  for (let i=0;i<N;i+=step){
+    const {s, wc} = arr[i];
+    const p=project(wc); if(!isFinite(p[0])) continue;
+    ctx.fillStyle=colorForSample(s); ctx.beginPath(); ctx.arc(p[0],p[1],pt,0,Math.PI*2); ctx.fill();
+  }
+}
+function render(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#040a1a'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  drawGrid(); drawAxes(); drawMesh(); drawSamples();
+  const p0=project(worldToCam([0,0,-25])); const pN=project(worldToCam([0,100,-25]));
+  if (isFinite(p0[0]) && isFinite(pN[0])) {
+    const ang= Math.atan2(pN[1]-p0[1], pN[0]-p0[0]); const deg = ang*180/Math.PI - 90;
+    needle.style.transform = `rotate(${deg.toFixed(2)}deg)`;
+  }
+}
+let needsRender = false;
+function scheduleRender(){ if (!needsRender) { needsRender = true; requestAnimationFrame(()=>{ needsRender=false; render(); }); } }
+function resizeCanvasToDisplaySize() {
+  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(300, Math.floor(rect.width * dpr));
+  const height = Math.max(300, Math.floor(rect.height * dpr));
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+    ctx.setTransform(1,0,0,1,0,0);
+    scheduleRender();
+  }
+}
+const ro = new ResizeObserver(()=> resizeCanvasToDisplaySize());
+ro.observe(canvas);
+window.addEventListener('orientationchange', ()=> setTimeout(resizeCanvasToDisplaySize, 200));
+window.addEventListener('resize', ()=> resizeCanvasToDisplaySize());
+let dragging=false, rotating=false, lx=0,ly=0;
+canvas.addEventListener('mousedown',e=>{dragging=true; rotating=e.shiftKey; lx=e.clientX; ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+addEventListener('mousemove',e=>{ if(!dragging) return; const dx=e.clientX-lx, dy=e.clientY-ly; lx=e.clientX; ly=e.clientY;
+  if(rotating){ camera.ry+=dx*0.005; camera.rx+=dy*0.005; } else { camera.panX+=dx; camera.panY+=dy; } scheduleRender(); });
+canvas.addEventListener('wheel',e=>{ e.preventDefault(); camera.dist *= (1 + e.deltaY*0.001); scheduleRender(); }, {passive:false});
+let touchMode = {active:false, rotating:false, lastDist:0, lx:0, ly:0};
+canvas.addEventListener('touchstart', (e)=>{
+  if (e.touches.length===1){ touchMode.active=true; touchMode.rotating=false; touchMode.lx=e.touches[0].clientX; touchMode.ly=e.touches[0].clientY; }
+  else if (e.touches.length===2){ touchMode.rotating=true; touchMode.active=true; touchMode.lastDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY); }
+}, {passive:true});
+canvas.addEventListener('touchmove', (e)=>{
+  if (!touchMode.active) return;
+  if (touchMode.rotating && e.touches.length===2){
+    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    const dd = d - touchMode.lastDist; touchMode.lastDist = d; camera.dist *= (1 - dd*0.002); scheduleRender();
+  } else if (e.touches.length===1){
+    const dx=e.touches[0].clientX - touchMode.lx; const dy=e.touches[0].clientY - touchMode.ly;
+    touchMode.lx=e.touches[0].clientX; touchMode.ly=e.touches[0].clientY;
+    camera.panX+=dx; camera.panY+=dy; scheduleRender();
+  }
+}, {passive:true});
+canvas.addEventListener('touchend', ()=>{ touchMode.active=false; }, {passive:true});
+document.getElementById('btn-fit').addEventListener('click', fitView);
+document.getElementById('btn-top').addEventListener('click', topView);
+document.getElementById('btn-capture').addEventListener('click',()=>{
+  try{
+    const dataURL = canvas.toDataURL('image/png');
+    fetch(dataURL).then(res=>res.blob()).then(blob=>{
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`capture_${meshName}.png`; a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+    });
+  }catch(err){ console.error(err); alert('Capture non supportée.'); }
+});
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  samples=[]; intervals=[]; triangles=[]; grid=null; meshS=null; lastSampleStats=null; lastIntervalStats=null; meshName='mesh_demo';
+  document.getElementById('results').innerHTML=''; document.getElementById('preview-samples').innerHTML=''; document.getElementById('preview-intervals').innerHTML='';
+  document.getElementById('stats-samples').textContent='-'; document.getElementById('stats-intervals').textContent='-'; document.getElementById('mesh-struct').textContent='-';
+  document.getElementById('preview-file').textContent='--'; auWarnEl.style.display='none'; auWarnEl.textContent='';
+  scheduleRender(); log('Réinitialisé.');
+});
+
+// ---------- Démo ----------
+function randomNormal(mu=0,s=1){ let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random(); return mu+s*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function demoMesh(){
+  const tris=[]; const nx=36, ny=36, spacing=100;
+  const zf=(x,y)=>-25 + 2.0*Math.sin(x*0.0015) + 2.0*Math.cos(y*0.0015);
+  for(let i=0;i<nx;i++){
+    for(let j=0;j<ny;j++){
+      const x0=(i-nx/2)*spacing, x1=(i+1-nx/2)*spacing;
+      const y0=(j-ny/2)*spacing, y1=(j+1-ny/2)*spacing;
+      const z00=zf(x0,y0), z01=zf(x0,y1), z10=zf(x1,y0), z11=zf(x1,y1);
+      const v00=[x0,y0,z00], v01=[x0,y1,z01], v10=[x1,y0,z10], v11=[x1,y1,z11];
+      const tA=[v00,v10,v11], tB=[v00,v11,v01];
+      if (vLen(vCross(vSub(tA[1],tA[0]), vSub(tA[2],tA[0])))>1e-9) tris.push(tA);
+      if (vLen(vCross(vSub(tB[1],tB[0]), vSub(tB[2],tB[0])))>1e-9) tris.push(tB);
+    }
+  }
+  return tris;
+}
+function ensureMesh(){ if(!triangles.length){ triangles=demoMesh(); meshName='mesh_demo'; meshS=planeStruct(triangles); } }
+async function generateDemoDataset(doFit=false){
+  ensureMesh();
+  const holes=[], N=10, spacing=200, off=(N-1)*spacing/2; let id=0;
+  for(let gy=0;gy<N;gy++) for(let gx=0;gx<N;gx++) holes.push({id:`DDH_${String(id++).padStart(3,'0')}`, x:gx*spacing-off, y:gy*spacing-off, z:0});
+  const out=[];
+  for(const h of holes){
+    let depth=0, target=60+randomNormal(0,5);
+    while(depth<target){
+      const L=Math.random()<0.5?1:2; const from=depth, to=depth+L, mid=0.5*(from+to);
+      const x=h.x, y=h.y, z=h.z - mid;
+      out.push({HoleID:h.id, From:from, To:to, X:x, Y:y, Z:z, Au:0, Length:L, Status:'OK', Dist:NaN});
+      depth=to;
+    }
+  }
+  samples=out;
+  const cell = Math.max(50, Math.min(400, meanEdgeL(triangles)*4 || 100));
+  grid = SpatialGrid(triangles, cell);
+  await computeDistancesFast({chunkSize:8000, maxRings:2, cell, dmax:200});
+  for (const s of samples){
+    const dist=s.Dist;
+    const background=Math.exp(randomNormal(Math.log(0.15),0.45));
+    let halo=0; if(dist<10) halo=1.0+Math.exp(randomNormal(Math.log(0.7),0.4)); else if(dist<30){ const t=(30-dist)/20; halo=t*Math.exp(randomNormal(Math.log(0.6),0.5)); }
+    s.Au=Math.max(0.1, Math.min(50, background+halo));
+  }
+  meshS=planeStruct(triangles); updateStats(); updatePreviews(); updateResults();
+  if (doFit) fitView(); else scheduleRender();
+  log(`Démo: ${samples.length} échantillons, ${triangles.length} triangles (mesh: ${meshName}).`);
+}
+document.getElementById('btn-generate-demo').addEventListener('click', async ()=>{ await generateDemoDataset(true); });
+document.getElementById('btn-generate-mesh-demo').addEventListener('click', async ()=>{
+  triangles=demoMesh(); meshS=planeStruct(triangles); meshName='mesh_demo';
+  await refreshAll(); fitView(); log(`Mesh démo créé: ${triangles.length} triangles.`);
+});
+
+// ---------- Import/Export DXF ----------
+function parseDXF(text){
+  const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  const tris=[]; let i=0;
+  while(i<lines.length-1){
+    const code=lines[i].trim(); const value=(lines[i+1]||'').trim();
+    if(code==='0' && value.toUpperCase()==='3DFACE'){
+      let vx=[],vy=[],vz=[]; let j=i+2;
+      while(j<lines.length){
+        const c=lines[j].trim(); const v=(lines[j+1]||'').trim();
+        if(c==='0') break;
+        if(c==='10') vx[0]=parseFloat(v); if(c==='20') vy[0]=parseFloat(v); if(c==='30') vz[0]=parseFloat(v);
+        if(c==='11') vx[1]=parseFloat(v); if(c==='21') vy[1]=parseFloat(v); if(c==='31') vz[1]=parseFloat(v);
+        if(c==='12') vx[2]=parseFloat(v); if(c==='22') vy[2]=parseFloat(v); if(c==='32') vz[2]=parseFloat(v);
+        if(c==='13') vx[3]=parseFloat(v); if(c==='23') vy[3]=parseFloat(v); if(c==='33') vz[3]=parseFloat(v);
+        j+=2;
+      }
+      const v1=[vx[0],vy[0],vz[0]], v2=[vx[1],vy[1],vz[1]], v3=[vx[2],vy[2],vz[2]];
+      if([v1,v2,v3].every(v=>v.every(Number.isFinite))){
+        const n=vCross(vSub(v2,v1), vSub(v3,v1));
+        if (vLen(n) > 1e-9) tris.push([v1,v2,v3]);
+      }
+      i=j; continue;
+    }
+    i+=2;
+  }
+  return {triangles:tris};
+}
+document.getElementById('file-dxf').addEventListener('change', async (e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const text=await readFileAsText(f);
+  const d=parseDXF(text);
+  triangles=d.triangles; meshS=planeStruct(triangles);
+  meshName = (f.name || 'mesh').replace(/\.dxf$/i,'').replace(/\s+/g,'_');
+  await refreshAll(); fitView(); log(`DXF: ${triangles.length} triangles (mesh: ${meshName}).`);
+});
+document.getElementById('btn-export-mesh').addEventListener('click', ()=>{
+  if(!triangles.length) return alert('Aucun mesh');
+  let dxf='0\nSECTION\n2\nENTITIES\n';
+  for(const t of triangles){
+    dxf+='0\n3DFACE\n8\n0\n';
+    dxf+=`10\n${fmt(t[0][0])}\n20\n${fmt(t[0][1])}\n30\n${fmt(t[0][2])}\n`;
+    dxf+=`11\n${fmt(t[1][0])}\n21\n${fmt(t[1][1])}\n31\n${fmt(t[1][2])}\n`;
+    dxf+=`12\n${fmt(t[2][0])}\n22\n${fmt(t[2][1])}\n32\n${fmt(t[2][2])}\n`;
+    dxf+=`13\n${fmt(t[2][0])}\n23\n${fmt(t[2][1])}\n33\n${fmt(t[2][2])}\n`;
+  }
+  dxf+='0\nENDSEC\n0\nEOF\n';
+  download(`${meshName||'mesh'}.dxf`, dxf, 'application/dxf');
+});
+
+// ---------- Densité / Densifier ----------
+document.getElementById('btn-check-density').addEventListener('click', ()=>{
+  if(!triangles.length) return alert('Aucun mesh');
+  const L=meanEdgeL(triangles), thr=parseFloat(document.getElementById('densify-threshold').value);
+  alert(L>thr ? 'Mesh peu dense' : 'Mesh ok');
+});
+document.getElementById('btn-densify').addEventListener('click', async ()=>{
+  if(!triangles.length) return alert('Aucun mesh');
+  const target=parseFloat(document.getElementById('densify-target').value);
+  const before=triangles.length; triangles=densify(triangles, target); const after=triangles.length;
+  meshS=planeStruct(triangles);
+  meshName = `${meshName}_dens${String(target).replace(/\./g,'_')}`;
+  await refreshAll(); fitView(); log(`Densifié: ${before} -> ${after} triangles (mesh: ${meshName}).`);
+});
+
+// ---------- Auto-mapping renforcé ----------
+const sel={holeid:'col-holeid',from:'col-from',to:'col-to',x:'col-x',y:'col-y',z:'col-z',au:'col-au',length:'col-length'};
+const mapEls=Object.fromEntries(Object.entries(sel).map(([k,id])=>[k,document.getElementById(id)]));
+
+function populateMapping(headers){
+  for(const k in mapEls){
+    const el=mapEls[k]; el.innerHTML='';
+    for(const h of headers){ const opt=document.createElement('option'); opt.value=h; opt.textContent=h; el.appendChild(opt); }
+  }
+  const H=headers;
+  const lower=headers.map(h=>h.toLowerCase());
+  const pick = (cands, avoid=[])=>{
+    const avoidL=avoid.map(s=>s.toLowerCase());
+    const scores = H.map((h,i)=>{
+      const hl=h.toLowerCase();
+      let s=0;
+      for(const c of cands){ const cl=c.toLowerCase(); if(hl===cl) s+=100; else if(hl.includes(cl)) s+=10; }
+      if(/\bau\b/.test(hl)) s+=60;
+      if(/\bppm\b|\bgpt\b|\bg\/t\b/.test(hl)) s+=30;
+      // pénalités
+      if(/\b(from|to|length|longueur|start|end)\b/.test(hl)) s-=80;
+      if(/\b(m|metre|meter|depth|rl|elevation)\b/.test(hl)) s-=40;
+      if (avoidL.includes(hl)) s-=999;
+      return {h,i,s};
+    });
+    scores.sort((a,b)=>b.s-a.s);
+    return scores[0]?.h ?? H[0] ?? '';
+  };
+  // champs de base
+  mapEls.holeid.value = pick(['holeid','hole id','ddh','bhid','bh_id','drillhole','bh id']);
+  mapEls.from.value   = pick(['from','debut','start','from_m','from_metre','from_meters']);
+  mapEls.to.value     = pick(['to','fin','end','to_m','to_metre','to_meters']);
+  mapEls.length.value = pick(['length','longueur','len','interval','drilling_length']);
+  mapEls.x.value      = pick(['x','easting','utm_e','utm_x','x_m']);
+  mapEls.y.value      = pick(['y','northing','utm_n','utm_y','y_m']);
+  mapEls.z.value      = pick(['z','rl','elevation','z_m','z_rl']);
+  // Au doit éviter From/To/Length
+  mapEls.au.value     = pick(['au','grade','assay','au_ppm','au_gpt','au_gpt','au_gt','au (g/t)'], [mapEls.from.value,mapEls.to.value,mapEls.length.value]);
+}
+
+// ---------- Alerte Au suspect ----------
+function detectAuAnomaly(rows){
+  if (!rows.length) return {suspect:false, reasons:[]};
+  const N=Math.min(5000, rows.length);
+  const au = [], from=[], to=[], len=[];
+  for(let i=0;i<N;i++){
+    const r=rows[i];
+    au.push(r.Au);
+    from.push(r.From);
+    to.push(r.To);
+    len.push(r.Length);
+  }
+  const finite = (a)=>a.filter(Number.isFinite);
+  const auF=finite(au), fF=finite(from), tF=finite(to), lF=finite(len);
+  const reasons=[];
+  if (auF.length<Math.max(50, Math.min(200, N*0.6))){
+    reasons.push('Trop peu de valeurs Au valides après parsing.');
+  }
+  const auStats = basicStats(auF);
+  if (auStats.max>200 || auStats.median>50){
+    reasons.push(`Au très élevé (médiane ~ ${fmt(auStats.median)}; max ${fmt(auStats.max)}).`);
+  }
+  // égalités fréquentes avec métriques
+  let eqLen=0, eqFrom=0, eqTo=0;
+  for(let i=0;i<Math.min(au.length, from.length, to.length, len.length); i++){
+    const a=au[i];
+    if(!isFinite(a)) continue;
+    if (isFinite(len[i]) && Math.abs(a-len[i])<1e-9) eqLen++;
+    if (isFinite(from[i]) && Math.abs(a-from[i])<1e-9) eqFrom++;
+    if (isFinite(to[i]) && Math.abs(a-to[i])<1e-9) eqTo++;
+  }
+  const ratioEqLen = eqLen/N, ratioEqFrom = eqFrom/N, ratioEqTo = eqTo/N;
+  if (ratioEqLen>0.3) reasons.push(`Au identique à Length dans ~${Math.round(100*ratioEqLen)}% des lignes.`);
+  if (ratioEqFrom>0.3) reasons.push(`Au identique à From dans ~${Math.round(100*ratioEqFrom)}% des lignes.`);
+  if (ratioEqTo>0.3) reasons.push(`Au identique à To dans ~${Math.round(100*ratioEqTo)}% des lignes.`);
+  // corrélation grossière avec métrages (Pearson approx)
+  function corr(a,b){
+    const n=Math.min(a.length,b.length); const xs=[], ys=[];
+    for(let i=0;i<n;i++){ const x=a[i], y=b[i]; if(isFinite(x)&&isFinite(y)) { xs.push(x); ys.push(y); } }
+    const mX=mean(xs), mY=mean(ys); if(!isFinite(mX)||!isFinite(mY)||xs.length<20) return 0;
+    let num=0, dx2=0, dy2=0; for(let i=0;i<xs.length;i++){ const dx=xs[i]-mX, dy=ys[i]-mY; num+=dx*dy; dx2+=dx*dx; dy2+=dy*dy; }
+    if (dx2===0||dy2===0) return 0; return num/Math.sqrt(dx2*dy2);
+  }
+  const cF=corr(au, from), cT=corr(au,to), cL=corr(au,len);
+  if (Math.abs(cF)>0.95 || Math.abs(cT)>0.95 || Math.abs(cL)>0.95){
+    reasons.push(`Corrélation très forte (|r|>0.95) entre Au et des métrages (From/To/Length).`);
+  }
+  // distribution plate sur grandes valeurs -> suspect
+  if (auStats.mean>30 && auStats.median>20) reasons.push('Distribution Au très élevée (mean/median > 20 g/t).');
+  return {suspect: reasons.length>0, reasons, stats:auStats};
+}
+
+// ---------- UI stats / previews / results ----------
+function statsTableHTML(title, map){
+  let html=`<h3 style="margin:0 0 6px">${title}</h3><div class="scroll"><table><thead><tr>
+  <th>Variable</th><th>Minimum</th><th>Moyenne</th><th>Médiane</th><th>Maximum</th><th>Somme</th><th>Nombre</th>
+  </tr></thead><tbody>`;
+  for(const k of Object.keys(map)){ const s=map[k]; html+=`<tr><td>${k}</td><td>${fmt(s.min)}</td><td>${fmt(s.mean)}</td><td>${fmt(s.median)}</td><td>${fmt(s.max)}</td><td>${fmt(s.sum)}</td><td>${s.n||0}</td></tr>`; }
+  html+='</tbody></table></div>'; return html;
+}
+function updateStats(){
+  const au=samples.map(s=>s.Au).filter(Number.isFinite);
+  const ln=samples.map(s=>s.Length).filter(Number.isFinite);
+  const di=samples.map(s=>s.Dist).filter(Number.isFinite);
+  lastSampleStats={'Au (g/t)':basicStats(au),'Longueur (m)':basicStats(ln),'Distance au mesh (m)':basicStats(di)};
+  document.getElementById('stats-samples').innerHTML=statsTableHTML('Statistiques -- Échantillons', lastSampleStats);
+
+  if(intervals.length){
+    lastIntervalStats={'AuMean (g/t)':basicStats(intervals.map(i=>i.AuMean)),'Longueur (m)':basicStats(intervals.map(i=>i.Length)),'Sterile Length (m)':basicStats(intervals.map(i=>i.SterileLen))};
+  } else {
+    lastIntervalStats={'AuMean (g/t)':{n:0,min:null,mean:null,median:null,max:null,sum:0},'Longueur (m)':{n:0,min:null,mean:null,median:null,max:null,sum:0},'Sterile Length (m)':{n:0,min:null,mean:null,median:null,max:null,sum:0}};
+  }
+  document.getElementById('stats-intervals').innerHTML=statsTableHTML('Statistiques -- Intervalles', lastIntervalStats);
+
+  const ms=document.getElementById('mesh-struct');
+  if(meshS){ const {strike,dip,dipDir,nx,ny,nz}=meshS;
+    ms.innerHTML=`<table><tbody>
+      <tr><td>Strike (°)</td><td>${fmt(strike,1)}</td></tr>
+      <tr><td>Dip dir (°)</td><td>${fmt(dipDir,1)}</td></tr>
+      <tr><td>Pendage (°)</td><td>${fmt(dip,1)}</td></tr>
+      <tr><td>Normale</td><td>${fmt(nx,3)}, ${fmt(ny,3)}, ${fmt(nz,3)}</td></tr>
+    </tbody></table>`;
+  } else { ms.textContent='--'; }
+}
+function updatePreviews(){
+  const sEl=document.getElementById('preview-samples'); const iEl=document.getElementById('preview-intervals');
+  if(!samples.length) sEl.innerHTML='<em>Aucun échantillon.</em>'; else{
+    const cols=['HoleID','From','To','X','Y','Z','Au','Length','Dist']; let h='<table><thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
+    const N=Math.min(150,samples.length); for(let i=0;i<N;i++){ const r=samples[i]; h+='<tr>'+cols.map(c=>`<td>${c==='HoleID'?r[c]:fmt(r[c])}</td>`).join('')+'</tr>'; } h+='</tbody></table>';
+    sEl.innerHTML=h;
+  }
+  if(!intervals.length) iEl.innerHTML='<em>Aucun intervalle.</em>'; else{
+    const cols=['HoleID','From','To','Length','AuMean','SterileLen']; let h='<table><thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
+    const N=Math.min(150,intervals.length); for(let i=0;i<N;i++){ const r=intervals[i]; h+='<tr>'+cols.map(c=>`<td>${c==='HoleID'?r[c]:fmt(r[c])}</td>`).join('')+'</tr>'; } h+='</tbody></table>'; iEl.innerHTML=h;
+  }
+}
+function updateResults(){
+  const el=document.getElementById('results'); if(!intervals.length){ el.innerHTML='<em>Aucun intervalle.</em>'; return; }
+  const cols=['HoleID','From','To','Length','AuMean','SterileLen']; let h='<div class="scroll"><table><thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
+  const rows=intervals.slice().sort((a,b)=>a.HoleID.localeCompare(b.HoleID));
+  for(const r of rows){ h+='<tr>'+cols.map(c=>`<td>${c==='HoleID'?r[c]:fmt(r[c])}</td>`).join('')+'</tr>'; } h+='</tbody></table></div>'; el.innerHTML=h;
+}
+async function refreshAll(){
+  if (triangles.length && samples.length) {
+    const cell = Math.max(50, Math.min(400, meanEdgeL(triangles)*4 || 100));
+    grid = SpatialGrid(triangles, cell);
+    await computeDistancesFast({chunkSize:8000, maxRings:2, cell, dmax:200});
+  }
+  meshS=triangles.length?planeStruct(triangles):null; updateStats(); updatePreviews(); updateResults(); scheduleRender();
+}
+
+// ---------- Import/mapping échantillons + garde-fous Au ----------
+document.getElementById('sep').addEventListener('change', e=> sepChoice=e.target.value);
+document.getElementById('dec').addEventListener('change', e=> decChoice=e.target.value);
+document.getElementById('no-header').addEventListener('change', e=> noHeader=e.target.checked);
+
+document.getElementById('file-samples').addEventListener('change', async (e)=>{
+  const f=e.target.files[0]; if(!f) return; const text=await readFileAsText(f);
+  const parsed=parseDelimited(text, sepChoice, decChoice, noHeader);
+  sampleRaw=parsed.rows; headersRaw=parsed.headers;
+  if(!headersRaw.length || !sampleRaw.length){
+    document.getElementById('preview-file').textContent='Fichier vide ou non reconnu.';
+    return;
+  }
+  populateMapping(headersRaw);
+  auWarnEl.style.display='none'; auWarnEl.textContent='';
+  previewTable('preview-file', headersRaw, sampleRaw, 20);
+  log(`Échantillons importés (bruts): ${sampleRaw.length}. Choisissez le mapping puis cliquez Appliquer.`);
+});
+
+document.getElementById('btn-apply-mapping').addEventListener('click', async ()=>{
+  if (!sampleRaw.length) return alert('Importez un fichier CSV/TXT d’échantillons d’abord.');
+  const m={}; for(const k in mapEls) m[k]=mapEls[k].value;
+
+  // transformation des lignes selon mapping
+  const out=[]; let dropped=0;
+  for(const r of sampleRaw){
+    const o={
+      HoleID:String(r[m.holeid] ?? '').trim(),
+      From:parseNumber(r[m.from], decChoice),
+      To:parseNumber(r[m.to], decChoice),
+      X:parseNumber(r[m.x], decChoice),
+      Y:parseNumber(r[m.y], decChoice),
+      Z:parseNumber(r[m.z], decChoice),
+      Au:parseNumber(r[m.au], decChoice),
+      Length:parseNumber(r[m.length], decChoice),
+      Status:'OK',
+      Dist:NaN
+    };
+    if(!isFinite(o.Length)||o.Length<=0) o.Length = o.To - o.From;
+    if(o.HoleID && [o.From,o.To,o.X,o.Y,o.Z,o.Au,o.Length].every(v=>isFinite(v))) out.push(o);
+    else dropped++;
+  }
+
+  if (!out.length) {
+    alert('Aucune ligne valide après mapping. Vérifiez séparateur, décimales et mapping.');
+    return;
+  }
+
+  // Détection Au suspect AVANT d’appliquer définitivement
+  const auCheck = detectAuAnomaly(out);
+  if (auCheck.suspect){
+    const msg = `Attention: la colonne Au semble incohérente.\n- ${auCheck.reasons.join('\n- ')}\n\nVérifiez le mapping (colonne Au) et le choix des décimales. Voulez-vous quand même continuer ?`;
+    auWarnEl.style.display='block';
+    auWarnEl.innerHTML = `<strong>Alerte Au:</strong><br>${auCheck.reasons.map(r=>'- '+r).join('<br>')}`;
+    const proceed = confirm(msg);
+    if(!proceed){
+      log('Application du mapping annulée suite à alerte Au.');
+      return;
+    }
+  } else {
+    auWarnEl.style.display='none'; auWarnEl.textContent='';
+  }
+
+  samples=out;
+  await refreshAll(); fitView();
+  log(`Mapping appliqué: ${samples.length} échantillons valides. Lignes ignorées: ${dropped}.`);
+});
+
+// ---------- Export CSV ----------
+document.getElementById('btn-export-intervals').addEventListener('click', ()=>{
+  if(!intervals.length) return alert('Aucun intervalle.');
+  const rows=[['HoleID','From','To','Length','AuMean','SterileLen']];
+  for(const r of intervals) rows.push([r.HoleID,fmt(r.From),fmt(r.To),fmt(r.Length),fmt(r.AuMean),fmt(r.SterileLen)]);
+  download(`intervalles_${meshName||'mesh'}.csv`, csv(rows, ','), 'text/csv');
+});
+document.getElementById('btn-export-demo').addEventListener('click', ()=>{
+  if(!samples.length) return alert('Aucune donnée.');
+  const rows=[['HoleID','From','To','X','Y','Z','Au','Length','Dist']]; for(const s of samples)
+    rows.push([s.HoleID,fmt(s.From),fmt(s.To),fmt(s.X),fmt(s.Y),fmt(s.Z),fmt(s.Au),fmt(s.Length),fmt(s.Dist)]);
+  download(`echantillons_${meshName||'mesh'}.csv`, csv(rows, ','), 'text/csv');
+});
+document.getElementById('btn-export-stats-samples').addEventListener('click', ()=>{
+  if(!lastSampleStats) return alert('Aucune statistique');
+  const rows=[['Variable','Minimum','Moyenne','Médiane','Maximum','Somme','Nombre']];
+  for(const k of Object.keys(lastSampleStats)){ const s=lastSampleStats[k]; rows.push([k,fmt(s.min),fmt(s.mean),fmt(s.median),fmt(s.max),s.sum!=null?fmt(s.sum):'',s.n||0]); }
+  download(`stats_echantillons_${meshName||'mesh'}.csv`, csv(rows, ','), 'text/csv');
+});
+document.getElementById('btn-export-stats-intervals').addEventListener('click', ()=>{
+  if(!lastIntervalStats) return alert('Aucune statistique');
+  const rows=[['Variable','Minimum','Moyenne','Médiane','Maximum','Somme','Nombre']];
+  for(const k of Object.keys(lastIntervalStats)){ const s=lastIntervalStats[k]; rows.push([k,fmt(s.min),fmt(s.mean),fmt(s.median),fmt(s.max),s.sum!=null?fmt(s.sum):'',s.n||0]); }
+  download(`stats_intervalles_${meshName||'mesh'}.csv`, csv(rows, ','), 'text/csv');
+});
+
+// ---------- Paramètres / Calcul intervalles ----------
+document.getElementById('btn-run').addEventListener('click', async ()=>{
+  if(!samples.length) return alert('Générez la démo ou importez des échantillons.');
+  const btn = document.getElementById('btn-run');
+  btn.disabled = true; btn.textContent = 'Calcul...';
+  const params={cutoff:parseFloat(document.getElementById('cutoff').value), maxDist:parseFloat(document.getElementById('max-dist').value), dilution:parseFloat(document.getElementById('dilution').value), agg:document.getElementById('agg').value};
+  const t0 = performance.now();
+  const cell = Math.max(50, Math.min(400, meanEdgeL(triangles)*4 || 100));
+  showProgress('Distances aux surfaces');
+  await computeDistancesFast({chunkSize:8000, maxRings:2, cell, dmax:200});
+  hideProgress();
+  let nElig=0, nDist=0;
+  for(const s of samples){ const okD = isFinite(s.Dist) && s.Dist<=params.maxDist; if (okD) nDist++; if (okD && s.Au>=params.cutoff) nElig++; }
+  log(`Éligibles: ${nElig}/${samples.length} (dist OK: ${nDist}). Paramètres: cutoff=${params.cutoff} g/t, maxDist=${params.maxDist} m, dilution=${params.dilution} m.`);
+  if (nElig===0){
+    alert('Aucun échantillon éligible avec les paramètres actuels.\nConseils:\n- Diminuez le cutoff Au\n- Augmentez la distance max\n- Vérifiez la cohérence du référentiel (mesh vs échantillons)');
+  }
+  intervals = computeIntervalsFast(params);
+  updateStats(); updatePreviews(); updateResults(); scheduleRender();
+  const t1 = performance.now();
+  log(`Intervalles: ${intervals.length} (mesh: ${meshName}) en ${Math.round(t1 - t0)} ms`);
+  if (!intervals.length){
+    log('Aucun intervalle généré. Vérifiez les paramètres et la distance au mesh.');
+    alert('Aucun intervalle généré.\nEssayez: augmenter la distance max, diminuer le cutoff, ou vérifier les distances (onglet statistiques échantillons).');
+  }
+  btn.disabled = false; btn.textContent = 'Calcul intervalles';
+});
+
+// ---------- Auto-initialisation ----------
+async function boot(){
+  resizeCanvasToDisplaySize();
+  log('Initialisation...');
+  triangles = demoMesh();
+  meshS = planeStruct(triangles);
+  meshName = 'mesh_demo';
+  scheduleRender();
+  fitView();
+  log(`Mesh démo prêt (${triangles.length} triangles). Génération des échantillons...`);
+  await generateDemoDataset(false);
+  fitView();
+  log('Prêt. Importez vos données ou cliquez “Calcul intervalles”.');
+}
+if (document.readyState === 'complete' || document.readyState === 'interactive'){
+  setTimeout(boot, 0);
+} else {
+  document.addEventListener('DOMContentLoaded', boot);
+}
+</script>
+</body>
+</html>
